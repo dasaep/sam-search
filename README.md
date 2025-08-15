@@ -14,310 +14,257 @@ A comprehensive system for searching, storing, and analyzing government contract
 ## System Architecture
 
 ### High-Level Architecture
-```
-┌────────────────────────────────────────────────────────────────────────────────┐
-│                              SAM.gov Opportunity Analysis System                 │
-├────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                  │
-│  ┌──────────────────────────────────────────────────────────────────────────┐  │
-│  │                           Presentation Layer                              │  │
-│  │  ┌────────────┐  ┌────────────┐  ┌────────────┐  ┌────────────┐        │  │
-│  │  │  Dashboard │  │Opportunity │  │ Capability │  │    High    │        │  │
-│  │  │            │  │    List    │  │  Manager   │  │  Matches   │        │  │
-│  │  └────────────┘  └────────────┘  └────────────┘  └────────────┘        │  │
-│  └──────────────────────────────────────────────────────────────────────────┘  │
-│                                        │                                        │
-│  ┌──────────────────────────────────────────────────────────────────────────┐  │
-│  │                          Application Layer (Flask API)                    │  │
-│  │  ┌────────────┐  ┌────────────┐  ┌────────────┐  ┌────────────┐        │  │
-│  │  │Opportunity │  │ Capability │  │  Matching  │  │ Statistics │        │  │
-│  │  │  Service   │  │  Service   │  │   Engine   │  │  Service   │        │  │
-│  │  └────────────┘  └────────────┘  └────────────┘  └────────────┘        │  │
-│  └──────────────────────────────────────────────────────────────────────────┘  │
-│                                        │                                        │
-│  ┌──────────────────────────────────────────────────────────────────────────┐  │
-│  │                              Data Layer                                   │  │
-│  │  ┌────────────────────┐      ┌────────────────────┐                     │  │
-│  │  │   MongoDB Atlas    │      │   SAM.gov API     │                     │  │
-│  │  │  ┌──────────────┐  │      │                    │                     │  │
-│  │  │  │Opportunities │  │◀─────│   Rate-Limited     │                     │  │
-│  │  │  ├──────────────┤  │      │   ETL Pipeline     │                     │  │
-│  │  │  │ Capabilities │  │      │                    │                     │  │
-│  │  │  ├──────────────┤  │      └────────────────────┘                     │  │
-│  │  │  │   Matches    │  │                                                 │  │
-│  │  │  └──────────────┘  │                                                 │  │
-│  │  └────────────────────┘                                                 │  │
-│  └──────────────────────────────────────────────────────────────────────────┘  │
-└────────────────────────────────────────────────────────────────────────────────┘
+
+```mermaid
+graph TB
+    subgraph "SAM.gov Opportunity Analysis System"
+        subgraph "Presentation Layer"
+            Dashboard[Dashboard]
+            OppList[Opportunity List]
+            CapManager[Capability Manager]
+            HighMatches[High Matches]
+        end
+        
+        subgraph "Application Layer - Flask API"
+            OppService[Opportunity Service]
+            CapService[Capability Service]
+            MatchEngine[Matching Engine]
+            StatService[Statistics Service]
+        end
+        
+        subgraph "Data Layer"
+            subgraph "MongoDB Atlas"
+                OppDB[(Opportunities)]
+                CapDB[(Capabilities)]
+                MatchDB[(Matches)]
+            end
+            
+            subgraph "External"
+                SAM[SAM.gov API<br/>Rate-Limited ETL Pipeline]
+            end
+        end
+        
+        Dashboard --> OppService
+        OppList --> OppService
+        CapManager --> CapService
+        HighMatches --> MatchEngine
+        
+        OppService --> OppDB
+        CapService --> CapDB
+        MatchEngine --> MatchDB
+        StatService --> OppDB
+        StatService --> CapDB
+        StatService --> MatchDB
+        
+        SAM --> OppDB
+    end
+    
+    style Dashboard fill:#e1f5fe
+    style OppList fill:#e1f5fe
+    style CapManager fill:#e1f5fe
+    style HighMatches fill:#e1f5fe
+    style OppService fill:#fff3e0
+    style CapService fill:#fff3e0
+    style MatchEngine fill:#fff3e0
+    style StatService fill:#fff3e0
+    style OppDB fill:#f3e5f5
+    style CapDB fill:#f3e5f5
+    style MatchDB fill:#f3e5f5
+    style SAM fill:#e8f5e9
 ```
 
 ### Component Interaction Diagram
-```
-     User Interface                    Backend Services                   External Systems
-          │                                    │                                │
-          │                                    │                                │
-    ┌─────▼─────┐                              │                                │
-    │   React   │                              │                                │
-    │  Frontend │                              │                                │
-    └─────┬─────┘                              │                                │
-          │                                    │                                │
-          │ HTTP/REST                          │                                │
-          │                                    │                                │
-    ┌─────▼─────────────────────────────────────────────────────┐              │
-    │                     Flask API Gateway                      │              │
-    │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐ │              │
-    │  │  Auth    │  │  Route   │  │  CORS    │  │  Error   │ │              │
-    │  │Middleware│  │ Handler  │  │ Handler  │  │ Handler  │ │              │
-    │  └──────────┘  └──────────┘  └──────────┘  └──────────┘ │              │
-    └─────┬─────────────────────────────────────────────────────┘              │
-          │                                                                     │
-          ├──────────────┬──────────────┬──────────────┐                      │
-          │              │              │              │                      │
-    ┌─────▼─────┐  ┌─────▼─────┐  ┌─────▼─────┐  ┌─────▼─────┐              │
-    │Opportunity│  │Capability │  │  Match    │  │Statistics │              │
-    │  Handler  │  │  Handler  │  │  Engine   │  │  Handler  │              │
-    └─────┬─────┘  └─────┬─────┘  └─────┬─────┘  └─────┬─────┘              │
-          │              │              │              │                      │
-          └──────────────┴──────────────┴──────────────┘                      │
-                                 │                                             │
-                                 │                                             │
-                    ┌────────────▼────────────┐                   ┌───────────▼──────────┐
-                    │    MongoDB Atlas        │                   │    SAM.gov API       │
-                    │  ┌─────────────────┐   │                   │                      │
-                    │  │  Collections:   │   │                   │  • Opportunities     │
-                    │  │  • opportunities│   │◀──────Sync────────│  • Search by NAICS   │
-                    │  │  • capabilities │   │                   │  • Date filtering    │
-                    │  │  • matches      │   │                   │  • Rate limits       │
-                    │  └─────────────────┘   │                   └──────────────────────┘
-                    └─────────────────────────┘
+
+```mermaid
+sequenceDiagram
+    participant UI as React Frontend
+    participant API as Flask API Gateway
+    participant Auth as Auth Middleware
+    participant Route as Route Handler
+    participant OppH as Opportunity Handler
+    participant CapH as Capability Handler
+    participant MatchE as Match Engine
+    participant StatH as Statistics Handler
+    participant MongoDB as MongoDB Atlas
+    participant SAM as SAM.gov API
+
+    UI->>API: HTTP/REST Request
+    API->>Auth: Authenticate
+    Auth->>Route: Route Request
+    
+    alt Opportunity Request
+        Route->>OppH: Handle Request
+        OppH->>MongoDB: Query Opportunities
+        MongoDB-->>OppH: Return Data
+        OppH-->>UI: JSON Response
+    else Capability Request
+        Route->>CapH: Handle Request
+        CapH->>MongoDB: Query Capabilities
+        MongoDB-->>CapH: Return Data
+        CapH-->>UI: JSON Response
+    else Match Request
+        Route->>MatchE: Process Matching
+        MatchE->>MongoDB: Query & Calculate
+        MongoDB-->>MatchE: Return Matches
+        MatchE-->>UI: Match Results
+    else Statistics Request
+        Route->>StatH: Generate Stats
+        StatH->>MongoDB: Aggregate Data
+        MongoDB-->>StatH: Return Stats
+        StatH-->>UI: Statistics
+    end
+    
+    Note over SAM,MongoDB: Sync Process (Scheduled)
+    SAM->>MongoDB: Sync Opportunities
+    MongoDB-->>SAM: Confirm Updates
 ```
 
 ## Functional Flow Diagrams
 
 ### 1. Opportunity Sync Flow
-```
-┌─────────────┐
-│   START     │
-└──────┬──────┘
-       │
-       ▼
-┌─────────────────┐     ┌──────────────────┐
-│  Check Last     │────▶│  Determine Date  │
-│  Sync State     │     │      Range       │
-└─────────────────┘     └─────────┬────────┘
-                               │
-                               ▼
-                    ┌──────────────────────┐
-                    │  For Each NAICS Code │◀─────┐
-                    └──────────┬───────────┘      │
-                               │                  │
-                               ▼                  │
-                    ┌──────────────────────┐      │
-                    │   Call SAM.gov API   │      │
-                    │   (Max 90 records)   │      │
-                    └──────────┬───────────┘      │
-                               │                  │
-                               ▼                  │
-                    ┌──────────────────────┐      │
-                    │   Rate Limiting      │      │
-                    │   (2 sec delay)      │      │
-                    └──────────┬───────────┘      │
-                               │                  │
-                               ▼                  │
-                    ┌──────────────────────┐      │
-                    │  Process & Transform │      │
-                    │     Opportunity      │      │
-                    └──────────┬───────────┘      │
-                               │                  │
-                               ▼                  │
-                    ┌──────────────────────┐      │
-                    │   Upsert to MongoDB  │      │
-                    │   (Deduplicate)      │      │
-                    └──────────┬───────────┘      │
-                               │                  │
-                               ▼                  │
-                    ┌──────────────────────┐      │
-                    │   More NAICS Codes?  │──Yes─┘
-                    └──────────┬───────────┘
-                               │ No
-                               ▼
-                    ┌──────────────────────┐
-                    │  Update Sync State   │
-                    │  (timestamp, count)  │
-                    └──────────┬───────────┘
-                               │
-                               ▼
-                        ┌──────────────┐
-                        │     END      │
-                        └──────────────┘
+
+```mermaid
+flowchart TD
+    Start([START])
+    CheckSync[Check Last Sync State]
+    DateRange[Determine Date Range]
+    ForEachNAICS[For Each NAICS Code]
+    CallAPI[Call SAM.gov API<br/>Max 90 records]
+    RateLimit[Rate Limiting<br/>2 sec delay]
+    Process[Process & Transform<br/>Opportunity]
+    Upsert[Upsert to MongoDB<br/>Deduplicate]
+    MoreNAICS{More NAICS Codes?}
+    UpdateSync[Update Sync State<br/>timestamp, count]
+    End([END])
+    
+    Start --> CheckSync
+    CheckSync --> DateRange
+    DateRange --> ForEachNAICS
+    ForEachNAICS --> CallAPI
+    CallAPI --> RateLimit
+    RateLimit --> Process
+    Process --> Upsert
+    Upsert --> MoreNAICS
+    MoreNAICS -->|Yes| ForEachNAICS
+    MoreNAICS -->|No| UpdateSync
+    UpdateSync --> End
+    
+    style Start fill:#90EE90
+    style End fill:#FFB6C1
+    style CallAPI fill:#87CEEB
+    style Upsert fill:#DDA0DD
 ```
 
 ### 2. Capability Matching Flow
-```
-User Triggers Analysis
-         │
-         ▼
-┌─────────────────────┐
-│  Select Opportunity │
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────────────────┐
-│  Retrieve All Active            │
-│  Capabilities from DB            │
-└──────────┬───────────────────────┘
-           │
-           ▼
-┌─────────────────────────────────┐
-│  For Each Capability             │◀────────────┐
-└──────────┬───────────────────────┘             │
-           │                                     │
-           ▼                                     │
-┌─────────────────────────────────┐              │
-│  Extract Opportunity Features:   │              │
-│  • Title                         │              │
-│  • Description                   │              │
-│  • NAICS Code                    │              │
-│  • Agency                        │              │
-│  • Set-Aside Type                │              │
-└──────────┬───────────────────────┘              │
-           │                                     │
-           ▼                                     │
-┌─────────────────────────────────┐              │
-│     Calculate Match Score:       │              │
-│                                  │              │
-│  ┌─────────────────────────┐    │              │
-│  │ Keyword Match (40%)     │    │              │
-│  │ • Search in title/desc  │    │              │
-│  │ • Count matched terms   │    │              │
-│  └─────────────────────────┘    │              │
-│                                  │              │
-│  ┌─────────────────────────┐    │              │
-│  │ NAICS Match (30%)       │    │              │
-│  │ • Exact code match      │    │              │
-│  └─────────────────────────┘    │              │
-│                                  │              │
-│  ┌─────────────────────────┐    │              │
-│  │ Agency Match (20%)      │    │              │
-│  │ • Preferred agency      │    │              │
-│  └─────────────────────────┘    │              │
-│                                  │              │
-│  ┌─────────────────────────┐    │              │
-│  │ Set-Aside Match (10%)   │    │              │
-│  │ • Preferred type        │    │              │
-│  └─────────────────────────┘    │              │
-└──────────┬───────────────────────┘              │
-           │                                     │
-           ▼                                     │
-┌─────────────────────────────────┐              │
-│  Store Match Result in DB        │              │
-│  (opportunity_id, capability_id, │              │
-│   score, details)                │              │
-└──────────┬───────────────────────┘              │
-           │                                     │
-           ▼                                     │
-┌─────────────────────────────────┐              │
-│  More Capabilities?              │───Yes───────┘
-└──────────┬───────────────────────┘
-           │ No
-           ▼
-┌─────────────────────────────────┐
-│  Sort Matches by Score           │
-│  (Descending)                    │
-└──────────┬───────────────────────┘
-           │
-           ▼
-┌─────────────────────────────────┐
-│  Return Top Matches to User      │
-└─────────────────────────────────┘
+
+```mermaid
+flowchart TD
+    UserTrigger([User Triggers Analysis])
+    SelectOpp[Select Opportunity]
+    RetrieveCap[Retrieve All Active<br/>Capabilities from DB]
+    ForEachCap[For Each Capability]
+    ExtractFeatures[Extract Opportunity Features:<br/>• Title<br/>• Description<br/>• NAICS Code<br/>• Agency<br/>• Set-Aside Type]
+    
+    subgraph CalcScore[Calculate Match Score]
+        Keyword[Keyword Match 40%<br/>• Search in title/desc<br/>• Count matched terms]
+        NAICS[NAICS Match 30%<br/>• Exact code match]
+        Agency[Agency Match 20%<br/>• Preferred agency]
+        SetAside[Set-Aside Match 10%<br/>• Preferred type]
+    end
+    
+    StoreResult[Store Match Result in DB<br/>opportunity_id, capability_id,<br/>score, details]
+    MoreCap{More Capabilities?}
+    SortMatches[Sort Matches by Score<br/>Descending]
+    ReturnMatches[Return Top Matches to User]
+    
+    UserTrigger --> SelectOpp
+    SelectOpp --> RetrieveCap
+    RetrieveCap --> ForEachCap
+    ForEachCap --> ExtractFeatures
+    ExtractFeatures --> CalcScore
+    CalcScore --> StoreResult
+    StoreResult --> MoreCap
+    MoreCap -->|Yes| ForEachCap
+    MoreCap -->|No| SortMatches
+    SortMatches --> ReturnMatches
+    
+    style UserTrigger fill:#90EE90
+    style ReturnMatches fill:#FFB6C1
+    style CalcScore fill:#FFF8DC
 ```
 
 ### 3. User Interaction Flow
-```
-┌──────────────┐
-│ User Access  │
-│   Frontend   │
-└───────┬──────┘
-        │
-        ▼
-┌──────────────────────────────────────────┐
-│           Dashboard View                 │
-│  ┌──────────────┐  ┌──────────────┐     │
-│  │ Statistics   │  │ Recent High  │     │
-│  │              │  │   Matches     │     │
-│  └──────────────┘  └──────────────┘     │
-└───────┬──────────────────────────────────┘
-        │
-        ├─────────────┬─────────────┬─────────────┐
-        ▼             ▼             ▼             ▼
-┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐
-│ Browse       │ │   Manage     │ │    View      │ │   Search     │
-│Opportunities │ │ Capabilities │ │  High Match  │ │   Filter     │
-└──────┬───────┘ └──────┬───────┘ └──────┬───────┘ └──────┬───────┘
-       │                │                │                │
-       ▼                ▼                ▼                ▼
-┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐
-│View Details  │ │Add/Edit Cap. │ │Adjust Thresh.│ │Apply Filters │
-│              │ │              │ │              │ │              │
-│ • Full Info  │ │ • Keywords   │ │ • >70% Match │ │ • NAICS      │
-│ • Documents  │ │ • NAICS      │ │ • >80% Match │ │ • Agency     │
-│ • Matches    │ │ • Agencies   │ │ • >90% Match │ │ • Date Range │
-└──────┬───────┘ └──────────────┘ └──────────────┘ └──────┬───────┘
-       │                                                   │
-       ▼                                                   ▼
-┌──────────────┐                                   ┌──────────────┐
-│   Analyze    │                                   │   Export     │
-│Opportunity   │                                   │   Results    │
-│              │                                   │              │
-│ • Run Match  │                                   │ • CSV        │
-│ • View Score │                                   │ • PDF        │
-└──────────────┘                                   └──────────────┘
+
+```mermaid
+flowchart TD
+    UserAccess[User Access Frontend]
+    
+    subgraph Dashboard[Dashboard View]
+        Stats[Statistics]
+        RecentMatches[Recent High Matches]
+    end
+    
+    BrowseOpp[Browse<br/>Opportunities]
+    ManageCap[Manage<br/>Capabilities]
+    ViewMatch[View<br/>High Match]
+    SearchFilter[Search<br/>Filter]
+    
+    ViewDetails[View Details<br/>• Full Info<br/>• Documents<br/>• Matches]
+    AddEditCap[Add/Edit Cap.<br/>• Keywords<br/>• NAICS<br/>• Agencies]
+    AdjustThresh[Adjust Thresh.<br/>• >70% Match<br/>• >80% Match<br/>• >90% Match]
+    ApplyFilters[Apply Filters<br/>• NAICS<br/>• Agency<br/>• Date Range]
+    
+    Analyze[Analyze Opportunity<br/>• Run Match<br/>• View Score]
+    Export[Export Results<br/>• CSV<br/>• PDF]
+    
+    UserAccess --> Dashboard
+    Dashboard --> BrowseOpp
+    Dashboard --> ManageCap
+    Dashboard --> ViewMatch
+    Dashboard --> SearchFilter
+    
+    BrowseOpp --> ViewDetails
+    ManageCap --> AddEditCap
+    ViewMatch --> AdjustThresh
+    SearchFilter --> ApplyFilters
+    
+    ViewDetails --> Analyze
+    ApplyFilters --> Export
+    
+    style UserAccess fill:#90EE90
+    style Dashboard fill:#E6E6FA
+    style Analyze fill:#FFE4B5
+    style Export fill:#FFE4B5
 ```
 
 ### 4. Data Processing Pipeline
-```
-                    SAM.gov API
-                         │
-                         ▼
-            ┌────────────────────────┐
-            │   Data Extraction      │
-            │  • API Authentication  │
-            │  • Request Formation   │
-            │  • Response Handling  │
-            └────────────┬───────────┘
-                         │
-                         ▼
-            ┌────────────────────────┐
-            │   Data Transformation  │
-            │  • Field Mapping       │
-            │  • Date Parsing        │
-            │  • Agency Formatting   │
-            │  • NAICS Enhancement   │
-            └────────────┬───────────┘
-                         │
-                         ▼
-            ┌────────────────────────┐
-            │   Data Validation      │
-            │  • Required Fields     │
-            │  • Format Checking     │
-            │  • Duplicate Detection │
-            └────────────┬───────────┘
-                         │
-                         ▼
-            ┌────────────────────────┐
-            │   MongoDB Storage      │
-            │  • Upsert Operation    │
-            │  • Index Creation      │
-            │  • Relationship Links │
-            └────────────┬───────────┘
-                         │
-                         ▼
-            ┌────────────────────────┐
-            │   Post-Processing      │
-            │  • Statistics Update   │
-            │  • Trigger Analysis    │
-            │  • Alert Generation    │
-            └────────────────────────┘
+
+```mermaid
+flowchart TD
+    SAMApi[SAM.gov API]
+    
+    DataExtract[Data Extraction<br/>• API Authentication<br/>• Request Formation<br/>• Response Handling]
+    
+    DataTransform[Data Transformation<br/>• Field Mapping<br/>• Date Parsing<br/>• Agency Formatting<br/>• NAICS Enhancement]
+    
+    DataValidate[Data Validation<br/>• Required Fields<br/>• Format Checking<br/>• Duplicate Detection]
+    
+    MongoStore[MongoDB Storage<br/>• Upsert Operation<br/>• Index Creation<br/>• Relationship Links]
+    
+    PostProcess[Post-Processing<br/>• Statistics Update<br/>• Trigger Analysis<br/>• Alert Generation]
+    
+    SAMApi --> DataExtract
+    DataExtract --> DataTransform
+    DataTransform --> DataValidate
+    DataValidate --> MongoStore
+    MongoStore --> PostProcess
+    
+    style SAMApi fill:#90EE90
+    style DataExtract fill:#87CEEB
+    style DataTransform fill:#FFE4B5
+    style DataValidate fill:#F0E68C
+    style MongoStore fill:#DDA0DD
+    style PostProcess fill:#FFB6C1
 ```
 
 ## Prerequisites
@@ -330,81 +277,84 @@ User Triggers Analysis
 ## Deployment Architecture
 
 ### Production Deployment
-```
-                            Internet
-                               │
-                    ┌──────────┴──────────┐
-                    │                     │
-                    │    Load Balancer    │
-                    │   (AWS ALB/Nginx)   │
-                    │                     │
-                    └──────────┬──────────┘
-                               │
-                ┌──────────────┴──────────────┐
-                │                             │
-    ┌───────────▼───────────┐     ┌──────────▼──────────┐
-    │   Web Server Node 1   │     │  Web Server Node 2  │
-    │  ┌─────────────────┐  │     │  ┌─────────────────┐ │
-    │  │  React Build    │  │     │  │  React Build    │ │
-    │  │  (Static Files) │  │     │  │  (Static Files) │ │
-    │  └─────────────────┘  │     │  └─────────────────┘ │
-    │  ┌─────────────────┐  │     │  ┌─────────────────┐ │
-    │  │   Flask API     │  │     │  │   Flask API     │ │
-    │  │   (Gunicorn)    │  │     │  │   (Gunicorn)    │ │
-    │  └─────────────────┘  │     │  └─────────────────┘ │
-    └───────────┬───────────┘     └──────────┬──────────┘
-                │                             │
-                └──────────┬──────────────────┘
-                           │
-                    ┌──────▼──────┐
-                    │   Redis      │
-                    │   Cache      │
-                    └──────┬──────┘
-                           │
-            ┌──────────────┼──────────────┐
-            │              │              │
-    ┌───────▼────────┐     │     ┌────────▼────────┐
-    │  MongoDB Atlas │     │     │   SAM.gov API  │
-    │    Cluster     │     │     │   (External)    │
-    │                │     │     │                 │
-    │ • Replica Set  │     │     │ • Rate Limited  │
-    │ • Auto-scaling │     │     │ • Scheduled     │
-    │ • Backups      │     │     │   Sync          │
-    └────────────────┘     │     └─────────────────┘
-                           │
-                    ┌──────▼──────┐
-                    │  Background  │
-                    │   Workers    │
-                    │              │
-                    │ • Scheduler  │
-                    │ • Sync Jobs  │
-                    │ • Analysis   │
-                    └──────────────┘
+
+```mermaid
+graph TB
+    Internet[Internet]
+    
+    LB[Load Balancer<br/>AWS ALB/Nginx]
+    
+    subgraph WebNodes[Web Server Nodes]
+        subgraph Node1[Web Server Node 1]
+            React1[React Build<br/>Static Files]
+            Flask1[Flask API<br/>Gunicorn]
+        end
+        
+        subgraph Node2[Web Server Node 2]
+            React2[React Build<br/>Static Files]
+            Flask2[Flask API<br/>Gunicorn]
+        end
+    end
+    
+    Redis[Redis Cache]
+    
+    MongoDB[MongoDB Atlas Cluster<br/>• Replica Set<br/>• Auto-scaling<br/>• Backups]
+    
+    SAMApi[SAM.gov API<br/>External<br/>• Rate Limited<br/>• Scheduled Sync]
+    
+    Workers[Background Workers<br/>• Scheduler<br/>• Sync Jobs<br/>• Analysis]
+    
+    Internet --> LB
+    LB --> Node1
+    LB --> Node2
+    Node1 --> Redis
+    Node2 --> Redis
+    Redis --> MongoDB
+    Redis --> Workers
+    Workers --> MongoDB
+    Workers --> SAMApi
+    
+    style Internet fill:#90EE90
+    style LB fill:#87CEEB
+    style Redis fill:#FFE4B5
+    style MongoDB fill:#DDA0DD
+    style SAMApi fill:#F0E68C
+    style Workers fill:#FFB6C1
 ```
 
 ### Container Architecture (Docker)
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                         Docker Host                              │
-│                                                                  │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │                    Docker Network                         │   │
-│  │                   (sam-network bridge)                    │   │
-│  └────┬──────────┬──────────┬──────────┬──────────┬────────┘   │
-│       │          │          │          │          │             │
-│  ┌────▼────┐ ┌──▼────┐ ┌──▼────┐ ┌──▼────┐ ┌──▼────┐         │
-│  │  Nginx  │ │ Flask │ │MongoDB│ │ Redis │ │Worker │         │
-│  │Container│ │  API  │ │       │ │       │ │       │         │
-│  │         │ │       │ │       │ │       │ │       │         │
-│  │Port: 80 │ │ :5001 │ │:27017 │ │ :6379 │ │       │         │
-│  └─────────┘ └───────┘ └───────┘ └───────┘ └───────┘         │
-│                                                                  │
-│  Volumes:                                                        │
-│  • ./frontend/build → /usr/share/nginx/html                     │
-│  • ./data/mongodb → /data/db                                    │
-│  • ./logs → /app/logs                                           │
-│                                                                  │
-└─────────────────────────────────────────────────────────────────┘
+
+```mermaid
+graph TB
+    subgraph DockerHost[Docker Host]
+        subgraph DockerNetwork[Docker Network - sam-network bridge]
+            Nginx[Nginx Container<br/>Port: 80]
+            Flask[Flask API<br/>Port: 5001]
+            MongoDB[MongoDB<br/>Port: 27017]
+            Redis[Redis<br/>Port: 6379]
+            Worker[Worker Container]
+        end
+        
+        subgraph Volumes[Volumes]
+            Vol1[./frontend/build → /usr/share/nginx/html]
+            Vol2[./data/mongodb → /data/db]
+            Vol3[./logs → /app/logs]
+        end
+    end
+    
+    Nginx -.-> Flask
+    Flask -.-> MongoDB
+    Flask -.-> Redis
+    Worker -.-> MongoDB
+    Worker -.-> Redis
+    
+    style DockerHost fill:#E6E6FA
+    style DockerNetwork fill:#F0F8FF
+    style Nginx fill:#87CEEB
+    style Flask fill:#FFE4B5
+    style MongoDB fill:#DDA0DD
+    style Redis fill:#F0E68C
+    style Worker fill:#FFB6C1
 ```
 
 ## Installation
@@ -445,57 +395,66 @@ cd ..
 
 ## Security Architecture
 
+```mermaid
+graph TB
+    subgraph SecurityLayers[Security Layers]
+        subgraph L1[Layer 1: Network Security]
+            HTTPS[HTTPS/TLS Encryption - Let's Encrypt]
+            Firewall[Firewall Rules - Port 443, 80 → 443 redirect]
+            DDoS[DDoS Protection - Cloudflare/AWS Shield]
+            IPWhitelist[IP Whitelisting for Admin Access]
+        end
+        
+        subgraph L2[Layer 2: Application Security]
+            JWT[JWT Token Authentication]
+            RateLimit[API Rate Limiting - Redis-based]
+            CORS[CORS Configuration]
+            InputVal[Input Validation & Sanitization]
+            SQLPrev[SQL Injection Prevention - Parameterized Queries]
+        end
+        
+        subgraph L3[Layer 3: Data Security]
+            EncRest[MongoDB Atlas Encryption at Rest]
+            TLS[TLS/SSL for Data in Transit]
+            KeyRotate[API Key Rotation - 90-day cycle]
+            EnvVars[Environment Variables for Secrets]
+            AuditLog[Audit Logging for Data Access]
+        end
+        
+        subgraph L4[Layer 4: Infrastructure Security]
+            Container[Container Isolation - Docker]
+            LeastPriv[Least Privilege Access]
+            SecUpdates[Regular Security Updates]
+            Backup[Backup & Disaster Recovery]
+            Monitor[Monitoring & Alerting - Prometheus/Grafana]
+        end
+    end
+    
+    style L1 fill:#E8F5E9
+    style L2 fill:#E3F2FD
+    style L3 fill:#FFF3E0
+    style L4 fill:#FCE4EC
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                        Security Layers                           │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│  Layer 1: Network Security                                       │
-│  ┌────────────────────────────────────────────────────────────┐ │
-│  │  • HTTPS/TLS Encryption (Let's Encrypt)                    │ │
-│  │  • Firewall Rules (Port 443, 80 → 443 redirect)            │ │
-│  │  • DDoS Protection (Cloudflare/AWS Shield)                 │ │
-│  │  • IP Whitelisting for Admin Access                        │ │
-│  └────────────────────────────────────────────────────────────┘ │
-│                                                                  │
-│  Layer 2: Application Security                                   │
-│  ┌────────────────────────────────────────────────────────────┐ │
-│  │  • JWT Token Authentication                                │ │
-│  │  • API Rate Limiting (Redis-based)                         │ │
-│  │  • CORS Configuration                                      │ │
-│  │  • Input Validation & Sanitization                         │ │
-│  │  • SQL Injection Prevention (Parameterized Queries)        │ │
-│  └────────────────────────────────────────────────────────────┘ │
-│                                                                  │
-│  Layer 3: Data Security                                          │
-│  ┌────────────────────────────────────────────────────────────┐ │
-│  │  • MongoDB Atlas Encryption at Rest                        │ │
-│  │  • TLS/SSL for Data in Transit                            │ │
-│  │  • API Key Rotation (90-day cycle)                        │ │
-│  │  • Environment Variables for Secrets                       │ │
-│  │  • Audit Logging for Data Access                          │ │
-│  └────────────────────────────────────────────────────────────┘ │
-│                                                                  │
-│  Layer 4: Infrastructure Security                                │
-│  ┌────────────────────────────────────────────────────────────┐ │
-│  │  • Container Isolation (Docker)                            │ │
-│  │  • Least Privilege Access                                 │ │
-│  │  • Regular Security Updates                               │ │
-│  │  • Backup & Disaster Recovery                             │ │
-│  │  • Monitoring & Alerting (Prometheus/Grafana)             │ │
-│  └────────────────────────────────────────────────────────────┘ │
-└─────────────────────────────────────────────────────────────────┘
 
-Authentication & Authorization Flow:
-┌──────────┐      ┌──────────┐      ┌──────────┐      ┌──────────┐
-│  Client  │─────▶│  Login   │─────▶│  Verify  │─────▶│  Issue   │
-│          │      │  Request │      │  Creds   │      │   JWT    │
-└──────────┘      └──────────┘      └──────────┘      └────┬─────┘
-                                                            │
-                  ┌──────────┐      ┌──────────┐           │
-                  │  Access  │◀─────│  Verify  │◀──────────┘
-                  │ Resource │      │   JWT    │
-                  └──────────┘      └──────────┘
+### Authentication & Authorization Flow
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant LoginReq as Login Request
+    participant VerifyCreds as Verify Credentials
+    participant IssueJWT as Issue JWT
+    participant VerifyJWT as Verify JWT
+    participant Resource as Access Resource
+    
+    Client->>LoginReq: Authentication Request
+    LoginReq->>VerifyCreds: Validate Credentials
+    VerifyCreds->>IssueJWT: Generate Token
+    IssueJWT-->>Client: Return JWT Token
+    
+    Client->>VerifyJWT: Request with JWT
+    VerifyJWT->>Resource: Grant Access
+    Resource-->>Client: Return Protected Data
 ```
 
 ## Configuration

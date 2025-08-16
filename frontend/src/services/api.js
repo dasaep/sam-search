@@ -15,6 +15,11 @@ export const opportunityService = {
     return response.data;
   },
 
+  getOpportunitiesWithSync: async (filters = {}) => {
+    const response = await api.get('/opportunities/with-sync', { params: filters });
+    return response.data;
+  },
+
   getOpportunity: async (id) => {
     const response = await api.get(`/opportunities/${id}`);
     return response.data;
@@ -53,6 +58,38 @@ export const matchService = {
 export const statisticsService = {
   getStatistics: async () => {
     const response = await api.get('/statistics');
+    return response.data;
+  },
+};
+
+export const hubspotService = {
+  getConfig: async () => {
+    const response = await api.get('/hubspot/config');
+    return response.data;
+  },
+
+  saveConfig: async (config) => {
+    const response = await api.post('/hubspot/config', config);
+    return response.data;
+  },
+
+  testConnection: async () => {
+    const response = await api.post('/hubspot/test');
+    return response.data;
+  },
+
+  syncToHubSpot: async (opportunityIds) => {
+    const response = await api.post('/hubspot/sync', { opportunity_ids: opportunityIds });
+    return response.data;
+  },
+
+  syncFromHubSpot: async () => {
+    const response = await api.post('/hubspot/sync-from');
+    return response.data;
+  },
+
+  getStatistics: async () => {
+    const response = await api.get('/hubspot/statistics');
     return response.data;
   },
 };

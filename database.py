@@ -38,6 +38,8 @@ class OpportunityDB:
             self.opportunities: Collection = self.db.opportunities
             self.capabilities: Collection = self.db.capabilities
             self.matches: Collection = self.db.matches
+            self.hubspot_sync: Collection = self.db.hubspot_sync
+            self.hubspot_config: Collection = self.db.hubspot_config
             
             log.info("Setting up database indexes...")
             self._setup_indexes()
@@ -64,6 +66,11 @@ class OpportunityDB:
         self.matches.create_index([("capability_id", ASCENDING)])
         self.matches.create_index([("match_percentage", DESCENDING)])
         self.matches.create_index([("created_at", DESCENDING)])
+        
+        self.hubspot_sync.create_index([("opportunity_id", ASCENDING)], unique=True)
+        self.hubspot_sync.create_index([("hubspot_deal_id", ASCENDING)])
+        self.hubspot_sync.create_index([("sync_status", ASCENDING)])
+        self.hubspot_sync.create_index([("last_sync", DESCENDING)])
     
     def upsert_opportunity(self, opportunity: Dict[str, Any]) -> str:
         """Insert or update an opportunity"""
@@ -221,3 +228,117 @@ class OpportunityDB:
     def close(self):
         """Close database connection"""
         self.client.close()
+    
+    # HubSpot Integration Methods
+    
+    def get_hubspot_sync_status(self, opportunity_id: str) -> Optional[Dict]:
+        """Get HubSpot sync status for an opportunity"""
+        doc = self.hubspot_sync.find_one({"opportunity_id": opportunity_id})
+        if doc:
+            doc["_id"] = str(doc["_id"])
+        return doc
+    
+    def update_hubspot_sync_status(self, sync_record: Dict[str, Any]) -> bool:
+        """Update HubSpot sync status for an opportunity"""
+        sync_record["updated_at"] = datetime.now(timezone.utc)
+        
+        result = self.hubspot_sync.update_one(
+            {"opportunity_id": sync_record["opportunity_id"]},
+            {"$set": sync_record},
+            upsert=True
+        )
+        return result.modified_count > 0 or result.upserted_id is not None
+    
+    def get_synced_opportunities(self, filters: Optional[Dict] = None) -> List[Dict]:
+        """Get all opportunities that have been synced to HubSpot"""
+        query = filters or {}
+        
+        synced = []
+        for doc in self.hubspot_sync.find(query):
+            doc["_id"] = str(doc["_id"])
+            synced.append(doc)
+        
+        return synced
+    
+    def get_opportunities_with_sync_status(self, filters: Optional[Dict] = None, limit: int = 100, skip: int = 0) -> List[Dict]:
+        """Get opportunities with their HubSpot sync status"""
+        pipeline = [
+            {"$match": filters or {}},
+            {"$sort": {"posted_date": -1}},
+            {"$skip": skip},
+            {"$limit": limit},
+            {
+                "$lookup": {
+                    "from": "hubspot_sync",
+                    "localField": "_id",
+                    "foreignField": "opportunity_id",
+                    "as": "hubspot_sync"
+                }
+            },
+            {
+                "$addFields": {
+                    "hubspot_sync": {"$arrayElemAt": ["$hubspot_sync", 0]}
+                }
+            }
+        ]
+        
+        opportunities = []
+        for doc in self.opportunities.aggregate(pipeline):
+            doc["_id"] = str(doc["_id"])
+            if doc.get("hubspot_sync"):
+                doc["hubspot_sync"]["_id"] = str(doc["hubspot_sync"]["_id"])
+            opportunities.append(doc)
+        
+        return opportunities
+    
+    def bulk_update_sync_status(self, sync_records: List[Dict[str, Any]]) -> int:
+        """Bulk update HubSpot sync status for multiple opportunities"""
+        count = 0
+        for record in sync_records:
+            if self.update_hubspot_sync_status(record):
+                count += 1
+        return count
+    
+    def save_hubspot_config(self, config: Dict[str, Any]) -> bool:
+        """Save HubSpot configuration"""
+        config["_id"] = "hubspot_config"  # Single document for config
+        config["updated_at"] = datetime.now(timezone.utc)
+        
+        result = self.hubspot_config.replace_one(
+            {"_id": "hubspot_config"},
+            config,
+            upsert=True
+        )
+        return result.modified_count > 0 or result.upserted_id is not None
+    
+    def get_hubspot_config(self) -> Optional[Dict]:
+        """Get HubSpot configuration"""
+        doc = self.hubspot_config.find_one({"_id": "hubspot_config"})
+        if doc:
+            del doc["_id"]
+        return doc
+    
+    def delete_hubspot_config(self) -> bool:
+        """Delete HubSpot configuration"""
+        result = self.hubspot_config.delete_one({"_id": "hubspot_config"})
+        return result.deleted_count > 0
+    
+    def get_hubspot_sync_statistics(self) -> Dict:
+        """Get HubSpot sync statistics"""
+        total_synced = self.hubspot_sync.count_documents({})
+        successful = self.hubspot_sync.count_documents({"sync_status": {"$in": ["created", "updated"]}})
+        failed = self.hubspot_sync.count_documents({"sync_status": "error"})
+        
+        # Get last sync time
+        last_sync = self.hubspot_sync.find_one(
+            {},
+            sort=[("last_sync", -1)]
+        )
+        
+        return {
+            "total_synced": total_synced,
+            "successful": successful,
+            "failed": failed,
+            "last_sync": last_sync["last_sync"] if last_sync else None,
+            "sync_percentage": (successful / total_synced * 100) if total_synced > 0 else 0
+        }

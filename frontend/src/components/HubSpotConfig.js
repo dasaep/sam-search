@@ -115,29 +115,39 @@ function HubSpotConfig() {
           <div className="form-section">
             <h3>Authentication</h3>
             <p className="help-text">
-              You can use either an API Key or OAuth Access Token. We recommend using OAuth for better security.
+              <strong>Important:</strong> HubSpot API Keys are deprecated. Use a Private App Access Token instead.
+            </p>
+            <p className="help-text">
+              To get your Access Token:
+              <br />1. Go to HubSpot Settings → Integrations → Private Apps
+              <br />2. Create a new Private App or use existing one
+              <br />3. Grant CRM scopes: crm.objects.deals.read, crm.objects.deals.write
+              <br />4. Copy the Access Token from your app
             </p>
             
             <div className="form-group">
-              <label>API Key (Legacy)</label>
-              <input
-                type="password"
-                name="api_key"
-                value={config.api_key}
-                onChange={handleChange}
-                placeholder="Enter your HubSpot API Key"
-              />
-            </div>
-            
-            <div className="form-group">
-              <label>Access Token (OAuth - Recommended)</label>
+              <label>Private App Access Token (Required)</label>
               <input
                 type="password"
                 name="access_token"
                 value={config.access_token}
                 onChange={handleChange}
-                placeholder="Enter your HubSpot Access Token"
+                placeholder="Enter your Private App Access Token"
               />
+              <small>Starts with: pat-na1-...</small>
+            </div>
+            
+            <div className="form-group">
+              <label>API Key (Deprecated - Not Recommended)</label>
+              <input
+                type="password"
+                name="api_key"
+                value={config.api_key}
+                onChange={handleChange}
+                placeholder="Legacy API Key (if still using)"
+                disabled={config.access_token ? true : false}
+              />
+              <small>Note: HubSpot API Keys are deprecated as of Nov 2022</small>
             </div>
           </div>
 

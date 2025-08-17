@@ -202,14 +202,17 @@ Navigate to HubSpot Settings → Properties → Deal Properties and create:
 - `sam_url` (URL)
 - `sam_posted_date` (Date picker)
 
-#### Get API Credentials
-**Option A: API Key (Legacy)**
-1. Settings → Integrations → API Key
-2. Generate or copy your API key
+#### Get API Credentials (Private App Access Token)
+1. Go to HubSpot Settings → Integrations → Private Apps
+2. Click "Create a private app" (or use existing)
+3. Name your app (e.g., "SAM.gov Integration")
+4. In the Scopes tab, grant these permissions:
+   - `crm.objects.deals.read`
+   - `crm.objects.deals.write`
+5. Create/Save the app
+6. Copy the Access Token (starts with `pat-na1-` or similar)
 
-**Option B: OAuth Access Token (Recommended)**
-1. Create app at developers.hubspot.com
-2. Get your access token
+**Important:** HubSpot API Keys are deprecated. You must use a Private App Access Token.
 
 ## Configuration
 

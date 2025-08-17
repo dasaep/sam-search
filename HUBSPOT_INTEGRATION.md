@@ -59,16 +59,24 @@ cd frontend && npm install
 
 ### 2. Configure HubSpot Access
 
-#### Option A: Using API Key (Legacy)
+#### Using Private App Access Token (Required)
 1. Log in to your HubSpot account
-2. Go to Settings → Integrations → API Key
-3. Generate or copy your API key
-4. Enter it in the configuration screen
+2. Go to Settings → Integrations → Private Apps
+3. Click "Create a private app" (or use an existing one)
+4. Give your app a name (e.g., "SAM.gov Integration")
+5. Go to the "Scopes" tab and select these CRM scopes:
+   - `crm.objects.deals.read`
+   - `crm.objects.deals.write`
+   - (Optional) `crm.schemas.deals.read` for custom properties
+6. Click "Create app" or "Save"
+7. Copy the Access Token (it starts with `pat-na1-` or similar)
+8. Enter this token in the configuration screen
 
-#### Option B: Using OAuth (Recommended)
-1. Create a HubSpot app at developers.hubspot.com
-2. Get your access token
-3. Enter it in the configuration screen
+**Important Notes:**
+- HubSpot API Keys are deprecated as of November 2022
+- Private App Access Tokens are the recommended authentication method
+- The token should start with `pat-` followed by your region code
+- Keep your token secure - it provides full access to your selected scopes
 
 ### 3. Create Custom Properties in HubSpot
 The integration uses custom deal properties. Create these in HubSpot:

@@ -57,8 +57,17 @@ class HubSpotClient:
             if params is None:
                 params = {}
             params["hapikey"] = self.api_key
+            log.info("Using API Key authentication (deprecated)")
+        elif self.access_token:
+            log.info(f"Using Bearer token authentication")
+            # Log first few chars of token for debugging (safely)
+            token_preview = self.access_token[:10] + "..." if len(self.access_token) > 10 else "***"
+            log.debug(f"Token preview: {token_preview}")
         
         try:
+            log.debug(f"Making {method} request to {url}")
+            log.debug(f"Headers: {self.headers}")
+            
             response = requests.request(
                 method=method,
                 url=url,
@@ -74,8 +83,25 @@ class HubSpotClient:
             
         except requests.exceptions.RequestException as e:
             log.error(f"HubSpot API request failed: {e}")
+            log.error(f"URL: {url}")
+            log.error(f"Method: {method}")
+            
             if hasattr(e, 'response') and e.response is not None:
-                log.error(f"Response: {e.response.text}")
+                log.error(f"Status Code: {e.response.status_code}")
+                log.error(f"Response Headers: {e.response.headers}")
+                log.error(f"Response Body: {e.response.text}")
+                
+                # Provide more helpful error messages
+                if e.response.status_code == 401:
+                    if self.access_token:
+                        error_msg = "Authentication failed. Please check your Private App Access Token. "
+                        error_msg += "Make sure it starts with 'pat-' and has the necessary scopes (crm.objects.deals.read, crm.objects.deals.write)."
+                    else:
+                        error_msg = "Authentication failed. Please provide a valid HubSpot Private App Access Token."
+                    raise ValueError(error_msg) from e
+                elif e.response.status_code == 403:
+                    error_msg = "Permission denied. Make sure your Private App has the necessary scopes: crm.objects.deals.read and crm.objects.deals.write"
+                    raise ValueError(error_msg) from e
             raise
     
     def create_deal(self, deal_data: Dict[str, Any]) -> Dict:
